@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>에르핀의 IQ 테스트</title>
+  <style>
+    #board {
+      display: grid;
+      grid-template-columns: repeat(8, 50px);
+      margin: 20px auto;
+    }
+    .cell {
+      width: 50px;
+      height: 50px;
+      background-size: cover;
+      background-position: center;
+      border: 1px solid #999;
+    }
+
+    /* image files */
+    .grade-a.default { background-image: url('stronger_cake.png'); }
+    .grade-b.default { background-image: url('weaker_cake.png'); }
+    .grade-c.default { background-image: url('ice_cream.png'); }
+    .grade-d.default { background-image: url('mint_ice_cream.png'); }
+
+    .visited {
+      background-image: url('filled_tile.png');
+    }
+
+    .knight {
+      background-image: url('player_erpin.png');
+    }
+
+    #controls {
+      text-align: center;
+      margin-top: 10px;
+    }
+
+    #info {
+      text-align: center;
+      font-size: 18px;
+    }
+  </style>
+</head>
+<body>
+  <h2 style="text-align: center;">에르핀의 IQ 테스트</h2>
+<div id="rules" style="max-width: 600px; margin: 0 auto; text-align: left; font-size: 14px; background: #f9f9f9; border: 1px solid #ccc; padding: 15px; border-radius: 10px;">
+  <strong>게임 규칙</strong><br><br>
+  에르핀은 체스 나이트 규칙에 따라 L자 모양(2칸 + 1칸)으로만 이동할 수 있습니다.<br>
+  모든 음식을 먹으면 게임 클리어!<br>
+  <br>
+  <strong>점수 시스템</strong><br>
+  음식은 위치에 따라 4등급으로 나뉘며, 점수가 다릅니다:<br>
+  &nbsp;&nbsp;- A: 중앙 4칸 → 4점<br>
+  &nbsp;&nbsp;- B: 중앙 둘러싼 칸 (2~5행/열) → 3점<br>
+  &nbsp;&nbsp;- C: 그 외 1~6행/열 → 2점<br>
+  &nbsp;&nbsp;- D: 가장 바깥 (0,7행/열) → 1점<br>
+  <br>
+  또한, 이동 순서에 따라 n배 점수가 적용됩니다:<br>
+  &nbsp;&nbsp;- 1~10턴: ×3<br>
+  &nbsp;&nbsp;- 11~30턴: ×2<br>
+  &nbsp;&nbsp;- 31턴 이후: ×1<br>
+  <br>
+  점수는 실시간으로 표시되며, 모든 음식을 먹으면 최종 점수가 나타납니다. 최종 스코어... 아니 최종 에르핀의 지능을 테스트 해보세요.<br>
+</div>
+  <div id="info">
+    <div id="timer">경과 시간: 0초</div>
+    <div id="score">IQ: 0점</div>
+  </div>
+  <div id="board"></div>
+  <div id="controls">
+    <button onclick="resetGame()">리트라이</button>
+  </div>
+
+  <script>
+    const SIZE = 8;
+    let knightPos = null;
+    let visited = []; // [x, y, turn]
+    let turnCount = 0;
+    let totalScore = 0;
+    let timer = 0;
+    let timerInterval = null;
+
+    const board = document.getElementById("board");
+    const timerDisplay = document.getElementById("timer");
+    const scoreDisplay = document.getElementById("score");
+
+    function isValidMove(x, y, fromX, fromY) {
+      const dx = Math.abs(x - fromX);
+      const dy = Math.abs(y - fromY);
+      return (dx === 2 && dy === 1) || (dx === 1 && dy === 2);
+    }
+
+    function getTileScore(x, y) {
+      if ((x === 3 || x === 4) && (y === 3 || y === 4)) return 4; // A
+      if ((x >= 2 && x <= 5) && (y >= 2 && y <= 5)) return 3;     // B
+      if ((x >= 1 && x <= 6) && (y >= 1 && y <= 6)) return 2;     // C
+      return 1;                                                  // D
+    }
+
+    function getMultiplier(turn) {
+      if (turn <= 10) return 3;
+      if (turn <= 30) return 2;
+      return 1;
+    }
+
+    function getTileGradeClass(x, y) {
+      if ((x === 3 || x === 4) && (y === 3 || y === 4)) return "grade-a";
+      if ((x >= 2 && x <= 5) && (y >= 2 && y <= 5)) return "grade-b";
+      if ((x >= 1 && x <= 6) && (y >= 1 && y <= 6)) return "grade-c";
+      return "grade-d";
+    }
+
+    function updateScoreDisplay() {
+      scoreDisplay.textContent = `점수: ${totalScore}점`;
+    }
+
+    function startTimer() {
+      timer = 0;
+      timerDisplay.textContent = `경과 시간: 0초`;
+      clearInterval(timerInterval);
+      timerInterval = setInterval(() => {
+        timer++;
+        timerDisplay.textContent = `경과 시간: ${timer}초`;
+      }, 1000);
+    }
+
+    function stopTimer() {
+      clearInterval(timerInterval);
+    }
+
+    function resetGame() {
+      knightPos = null;
+      visited = [];
+      turnCount = 0;
+      totalScore = 0;
+      updateScoreDisplay();
+      startTimer();
+      drawBoard();
+    }
+
+    function drawBoard() {
+      board.innerHTML = "";
+      for (let y = 0; y < SIZE; y++) {
+        for (let x = 0; x < SIZE; x++) {
+          const cell = document.createElement("div");
+          cell.className = "cell default " + getTileGradeClass(x, y);
+          cell.dataset.x = x;
+          cell.dataset.y = y;
+
+          const visit = visited.find(p => p[0] === x && p[1] === y);
+          if (visit) {
+            cell.classList.remove("default");
+            cell.classList.add("visited");
+          }
+
+          if (knightPos && knightPos[0] === x && knightPos[1] === y) {
+            cell.classList.remove("default", "visited");
+            cell.classList.add("knight");
+          }
+
+          cell.addEventListener("click", () => {
+            if (!knightPos) {
+              knightPos = [x, y];
+              turnCount = 1;
+              visited.push([x, y, turnCount]);
+              const score = getTileScore(x, y) * getMultiplier(turnCount);
+              totalScore += score;
+              updateScoreDisplay();
+              drawBoard();
+            } else if (
+              isValidMove(x, y, knightPos[0], knightPos[1]) &&
+              !visited.some(p => p[0] === x && p[1] === y)
+            ) {
+              turnCount++;
+              knightPos = [x, y];
+              visited.push([x, y, turnCount]);
+              const score = getTileScore(x, y) * getMultiplier(turnCount);
+              totalScore += score;
+              updateScoreDisplay();
+              drawBoard();
+            }
+
+            if (visited.length === SIZE * SIZE) {
+              stopTimer();
+              setTimeout(() => {
+                alert(`먹을것이 주말농장에 갔습니다! 총 점수: ${totalScore}점\n경과 시간: ${timer}초`);
+                if (confirm("다시 에르핀의 IQ를 테스트하고 싶나요?")) {
+                  resetGame();
+                }
+              }, 100);
+            }
+          });
+
+          board.appendChild(cell);
+        }
+      }
+    }
+
+    resetGame();
+  </script>
+</body>
+</html>
